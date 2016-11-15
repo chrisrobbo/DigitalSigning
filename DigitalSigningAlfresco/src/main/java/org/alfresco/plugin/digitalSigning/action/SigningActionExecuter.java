@@ -89,7 +89,7 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 	
 	@Override
 	protected void executeImpl(Action ruleAction, NodeRef actionedUponNodeRef) {
-		final NodeRef privateKey = (NodeRef)ruleAction.getParameterValue(PARAM_PRIVATE_KEY);
+/*		final NodeRef privateKey = (NodeRef)ruleAction.getParameterValue(PARAM_PRIVATE_KEY);
 		final String keyPassword = (String)ruleAction.getParameterValue(PARAM_KEY_PASSWORD);
 		final NodeRef destinationFolder = (NodeRef)ruleAction.getParameterValue(PARAM_DESTINATION_FOLDER);
 		final String reason = (String)ruleAction.getParameterValue(PARAM_REASON);
@@ -106,8 +106,26 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 		final Integer marginY = getInteger(ruleAction.getParameterValue(PARAM_MARGIN_Y));
 		final Integer height = getInteger(ruleAction.getParameterValue(PARAM_HEIGHT));
 		final Integer width = getInteger(ruleAction.getParameterValue(PARAM_WIDTH));
-		final Integer pageNumber = getInteger(ruleAction.getParameterValue(PARAM_PAGE_NUMBER));
+		final Integer pageNumber = getInteger(ruleAction.getParameterValue(PARAM_PAGE_NUMBER)); */
+
+		final NodeRef privateKey = null;
+		final String keyPassword = "wibble01";
+		final String reason = "Webrecs e-witness";
+		final String location = "Sydney";
+		final NodeRef image = null;
+		final String field = null;
+		final String position = "topleft";
+		final String page = "last";
+		final String depth = "over";
+		final Integer locationX = null;
+		final Integer locationY = null;
+		final Integer marginX = null;
+		final Integer marginY = null;
+		final Integer height = 500;
+		final Integer width = 500;
+		final Integer pageNumber = null;
 		
+
 		final DigitalSigningDTO signingDTO = new DigitalSigningDTO();
 		
 		if (actionedUponNodeRef != null) {
@@ -166,6 +184,8 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 			log.error("key-password parameter is required.");
 			throw new AlfrescoRuntimeException("key-password parameter is required.");
 		}
+		NodeRef parentFolder = nodeService.getPrimaryParent(actionedUponNodeRef).getParentRef() ;
+		NodeRef destinationFolder = nodeService.getPrimaryParent(parentFolder).getParentRef() ;
 		if (destinationFolder != null) {
 			signingDTO.setDestinationFolder(destinationFolder);
 		} else {
@@ -178,6 +198,7 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 		if (location != null) {
 			signingDTO.setSignLocation(location);
 		}
+		String contact = authenticationService.getCurrentUserName();
 		if (contact != null) {
 			signingDTO.setSignContact(contact);
 		}
@@ -251,7 +272,7 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 
 	@Override
 	protected void addParameterDefinitions(final List<ParameterDefinition> paramList) {
-		paramList.add(new ParameterDefinitionImpl(PARAM_PRIVATE_KEY, DataTypeDefinition.NODE_REF, true, getParamDisplayLabel(PARAM_PRIVATE_KEY)));
+/*		paramList.add(new ParameterDefinitionImpl(PARAM_PRIVATE_KEY, DataTypeDefinition.NODE_REF, true, getParamDisplayLabel(PARAM_PRIVATE_KEY)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_KEY_PASSWORD, DataTypeDefinition.TEXT, true, getParamDisplayLabel(PARAM_KEY_PASSWORD)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_KEY_TYPE, DataTypeDefinition.TEXT, true, getParamDisplayLabel(PARAM_KEY_TYPE)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_DESTINATION_FOLDER, DataTypeDefinition.NODE_REF, true, getParamDisplayLabel(PARAM_DESTINATION_FOLDER)));
@@ -269,7 +290,7 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 		paramList.add(new ParameterDefinitionImpl(PARAM_MARGIN_Y, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_MARGIN_Y)));
         paramList.add(new ParameterDefinitionImpl(PARAM_WIDTH, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_WIDTH)));
         paramList.add(new ParameterDefinitionImpl(PARAM_HEIGHT, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_HEIGHT)));
-        paramList.add(new ParameterDefinitionImpl(PARAM_PAGE_NUMBER, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_PAGE_NUMBER)));
+        paramList.add(new ParameterDefinitionImpl(PARAM_PAGE_NUMBER, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_PAGE_NUMBER))); */
 	}
 	
 	/**
@@ -318,12 +339,5 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 		this.nodeService = nodeService;
 	}
 
-	/* (non-Javadoc)
-	 * @see org.alfresco.repo.action.executer.ActionExecuterAbstractBase#init()
-	 */
-	@Override
-	public void init() {
-		publicAction = false;
-	}
 
 }

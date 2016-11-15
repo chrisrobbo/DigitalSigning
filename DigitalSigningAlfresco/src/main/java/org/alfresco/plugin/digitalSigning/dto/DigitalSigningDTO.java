@@ -26,6 +26,11 @@ public class DigitalSigningDTO {
     public static final String PAGE_EVEN = "even";
     */
     public static final String PAGE_SPECIFIC = "specific";
+    
+    /*  
+     * Put signature on a new page.
+     */
+    public static final String PAGE_NEW = "new";
 
     /**
      * Sign position.

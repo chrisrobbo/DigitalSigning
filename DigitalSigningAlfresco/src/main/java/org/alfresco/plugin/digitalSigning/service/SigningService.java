@@ -739,6 +739,11 @@ public class SigningService {
             image = Image.getInstance(p); 
             document.add(image); 
         } 
+        /* Add blank page if needed 
+        document.newPage();
+        writer.setPageEmpty(false);
+        document.newPage(); */
+        
         writer.createXmpMetadata(); 
 
         document.close(); 
@@ -746,6 +751,11 @@ public class SigningService {
         //Add Metadata from source pdf 
         HashMap<String, String> info = reader.getInfo(); 
         stamper.setMoreInfo(info); 
+        
+        //add blank page if required
+        stamper.insertPage(reader.getNumberOfPages() + 1,reader.getPageSizeWithRotation(1));
+        reader.close();
+        
         stamper.close();
         
         return pdfAFile;
