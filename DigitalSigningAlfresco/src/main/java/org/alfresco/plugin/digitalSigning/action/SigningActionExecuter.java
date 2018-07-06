@@ -110,19 +110,25 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 
 		final NodeRef privateKey = null;
 		final String keyPassword = "wibble01";
-		final String reason = "Webrecs e-witness";
+		final String reason = "e-Witness certification";
 		final String location = "Sydney";
 		final NodeRef image = null;
 		final String field = null;
 		final String position = "topleft";
 		final String page = "last";
 		final String depth = "over";
-		final Integer locationX = null;
+		final Integer locationX = getInteger(ruleAction.getParameterValue(PARAM_LOCATION_X));
+		final Integer locationY = getInteger(ruleAction.getParameterValue(PARAM_LOCATION_Y));
+		final Integer marginX = getInteger(ruleAction.getParameterValue(PARAM_MARGIN_X));
+		final Integer marginY = getInteger(ruleAction.getParameterValue(PARAM_MARGIN_Y));
+		final Integer height = getInteger(ruleAction.getParameterValue(PARAM_HEIGHT));
+		final Integer width = getInteger(ruleAction.getParameterValue(PARAM_WIDTH));
+		/*final Integer locationX = null;
 		final Integer locationY = null;
 		final Integer marginX = null;
 		final Integer marginY = null;
 		final Integer height = 500;
-		final Integer width = 500;
+		final Integer width = 500;*/
 		final Integer pageNumber = null;
 		
 
@@ -283,13 +289,20 @@ public class SigningActionExecuter extends ActionExecuterAbstractBase {
 		paramList.add(new ParameterDefinitionImpl(PARAM_FIELD, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_FIELD)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_POSITION, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_POSITION)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_PAGE, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_PAGE)));
-		paramList.add(new ParameterDefinitionImpl(PARAM_DEPTH, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_DEPTH)));
+		paramList.add(new ParameterDefinitionImpl(PARAM_DEPTH, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_DEPTH))); 
 		paramList.add(new ParameterDefinitionImpl(PARAM_LOCATION_X, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_LOCATION_X)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_LOCATION_Y, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_LOCATION_Y)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_MARGIN_X, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_MARGIN_X)));
 		paramList.add(new ParameterDefinitionImpl(PARAM_MARGIN_Y, DataTypeDefinition.TEXT, false, getParamDisplayLabel(PARAM_MARGIN_Y)));
         paramList.add(new ParameterDefinitionImpl(PARAM_WIDTH, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_WIDTH)));
-        paramList.add(new ParameterDefinitionImpl(PARAM_HEIGHT, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_HEIGHT)));
+        paramList.add(new ParameterDefinitionImpl(PARAM_HEIGHT, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_HEIGHT))); */
+		paramList.add(new ParameterDefinitionImpl(PARAM_LOCATION_X, DataTypeDefinition.TEXT, false,"X-location"));
+		paramList.add(new ParameterDefinitionImpl(PARAM_LOCATION_Y, DataTypeDefinition.TEXT, false, "Y-location"));
+		paramList.add(new ParameterDefinitionImpl(PARAM_MARGIN_X, DataTypeDefinition.TEXT, false, "X-margin"));
+		paramList.add(new ParameterDefinitionImpl(PARAM_MARGIN_Y, DataTypeDefinition.TEXT, false, "Y-margin"));
+        paramList.add(new ParameterDefinitionImpl(PARAM_WIDTH, DataTypeDefinition.INT, false,"Width"));
+        paramList.add(new ParameterDefinitionImpl(PARAM_HEIGHT, DataTypeDefinition.INT, false, "Height"));
+         /*
         paramList.add(new ParameterDefinitionImpl(PARAM_PAGE_NUMBER, DataTypeDefinition.INT, false, getParamDisplayLabel(PARAM_PAGE_NUMBER))); */
 	}
 	

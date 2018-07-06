@@ -7,6 +7,7 @@ import java.awt.Graphics2D;
 import java.awt.RenderingHints;
 import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileOutputStream;
@@ -28,6 +29,7 @@ import java.util.Calendar;
 import java.util.HashMap;
 import java.util.Iterator;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import javax.imageio.ImageIO;
 
@@ -44,6 +46,7 @@ import org.alfresco.repo.content.filestore.FileContentReader;
 import org.alfresco.repo.content.filestore.FileContentWriter;
 import org.alfresco.repo.content.transform.ContentTransformer;
 import org.alfresco.repo.content.transform.ContentTransformerRegistry;
+import org.alfresco.service.cmr.repository.AssociationRef;
 import org.alfresco.repo.node.encryption.MetadataEncryptor;
 import org.alfresco.repo.security.authentication.AuthenticationUtil;
 import org.alfresco.service.cmr.dictionary.DictionaryService;
@@ -55,7 +58,10 @@ import org.alfresco.service.cmr.repository.ContentService;
 import org.alfresco.service.cmr.repository.ContentWriter;
 import org.alfresco.service.cmr.repository.NodeRef;
 import org.alfresco.service.cmr.repository.NodeService;
+import org.alfresco.service.cmr.repository.StoreRef;
 import org.alfresco.service.cmr.repository.TransformationOptions;
+import org.alfresco.service.cmr.thumbnail.ThumbnailService;
+import org.alfresco.service.namespace.NamespaceService;
 import org.alfresco.service.namespace.QName;
 import org.alfresco.util.TempFileProvider;
 import org.apache.commons.io.IOUtils;
@@ -63,13 +69,23 @@ import org.apache.commons.logging.Log;
 import org.apache.commons.logging.LogFactory;
 import org.bouncycastle.jce.provider.BouncyCastleProvider;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.itextpdf.text.Chunk;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Font;
+import com.itextpdf.text.Font.FontFamily;
 import com.itextpdf.text.Image;
+import com.itextpdf.text.Phrase;
 import com.itextpdf.text.Rectangle;
 import com.itextpdf.text.pdf.AcroFields;
 import com.itextpdf.text.pdf.AcroFields.FieldPosition;
+import com.itextpdf.text.pdf.ColumnText;
+import com.itextpdf.text.pdf.PdfAnnotation;
+import com.itextpdf.text.pdf.PdfAppearance;
 import com.itextpdf.text.pdf.PdfArray;
+import com.itextpdf.text.pdf.PdfContentByte;
 import com.itextpdf.text.pdf.PdfDictionary;
 import com.itextpdf.text.pdf.PdfImportedPage;
 import com.itextpdf.text.pdf.PdfName;
@@ -79,6 +95,7 @@ import com.itextpdf.text.pdf.PdfSignatureAppearance;
 import com.itextpdf.text.pdf.PdfStamper;
 import com.itextpdf.text.pdf.PdfString;
 import com.itextpdf.text.pdf.PdfWriter;
+
 
 /**
  * Sign service for Alfresco
@@ -122,6 +139,27 @@ public class SigningService {
 	 * Metadata encryptor.
 	 */
 	private MetadataEncryptor metadataEncryptor;
+	
+	private ThumbnailService thumbnailService;
+	
+	/* webrecs sitnessed sign constants 
+	 * TODO this shojld be an import from the witnesed-sign project 
+	 * 
+	 */
+	
+	private   String WITNESSED_SIGN_MODEL_1_0_URI = "http://wrws.com.au/model/documents/1.0";
+	private   QName ASPECT_MARKEDUP = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "MarkedupForSigning");
+	private   QName ASPECT_HASVIDEOCLIPS = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "HasVideoClips");
+	private   QName SIGNING_SYSTEM = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "signingSystem");
+	private   QName SIGNING_DOCID = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "documentId");
+	private   QName SIGNING_ENVELOPEID = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "envelopeId");
+	private   QName SIGNING_CURRENTLOC = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "currentLocation");
+	private   QName SIGNING_LOCATIONS = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "signingLocations");
+	private   QName SIGNING_VIDEOCLIP = QName.createQName(WITNESSED_SIGN_MODEL_1_0_URI, "videoClip");
+	   
+	private static final int ATTACHMENT_ANNOT_WIDTH=100;
+	private static final int ATTACHMENT_ANNOT_HEIGHT=50;
+
 	
 	
 	private AlfrescoRuntimeException signFile(final NodeRef nodeRefToSign, final DigitalSigningDTO signingDTO, final File alfTempDir, final String alias, final KeyStore ks, final PrivateKey key, final Certificate[] chain) {
@@ -178,9 +216,14 @@ public class SigningService {
 				        
 				        if (file != null) {
 					        final FileOutputStream fout = new FileOutputStream(file);
-					        final PdfStamper stp = PdfStamper.createSignature(reader, fout, '\0');
 					        
+					        final PdfStamper stp = PdfStamper.createSignature(reader, fout, '\0');
 					        if (stp != null) {
+					        	
+					        	// webrecs add any overlays. Move pagerect to here coz we need it 
+								final Rectangle pageRect = reader.getPageSizeWithRotation(1);
+								addWitnessedSignOverlays (nodeRefToSign, stp, pageRect);
+
 								final PdfSignatureAppearance sap = stp.getSignatureAppearance();
 								if (sap != null) {
 									sap.setCrypto(key, chain, null, PdfSignatureAppearance.WINCER_SIGNED);
@@ -189,6 +232,11 @@ public class SigningService {
 									sap.setContact(signingDTO.getSignContact());
 									sap.setCertificationLevel(PdfSignatureAppearance.CERTIFIED_NO_CHANGES_ALLOWED);
 									sap.setImageScale(1);
+									/*
+									sap.setImageScale((float) 0.1);
+									sap.setLayer2Text (" ");
+									sap.setLayer4Text ("Sighted and certified a true copy of the original"); */
+									
 									
 									// digital signature
 									if (signingDTO.getSigningField() != null && !signingDTO.getSigningField().trim().equalsIgnoreCase("")) {
@@ -231,12 +279,14 @@ public class SigningService {
 											sap.setImage(img);
 										}
 										if(signingDTO.getPosition() != null && !DigitalSigningDTO.POSITION_CUSTOM.equalsIgnoreCase(signingDTO.getPosition().trim())) {
-											final Rectangle pageRect = reader.getPageSizeWithRotation(1);
+											//final Rectangle pageRect = reader.getPageSizeWithRotation(1);
 							                sap.setVisibleSignature(positionSignature(signingDTO.getPosition(), pageRect, signingDTO.getSignWidth(), signingDTO.getSignHeight(), signingDTO.getxMargin(), signingDTO.getyMargin()), pageToSign, null);
 										} else {
 							                sap.setVisibleSignature(new Rectangle(signingDTO.getLocationX(), signingDTO.getLocationY(), signingDTO.getLocationX() + signingDTO.getSignWidth(), signingDTO.getLocationY() - signingDTO.getSignHeight()), pageToSign, null);
 										}
 									}
+
+									
 									stp.close();
 								
 									NodeRef destinationNode = null;
@@ -285,6 +335,7 @@ public class SigningService {
 									            nodeService.createAssociation(originalDoc, destinationNode, SigningModel.PROP_RELATED_DOC);
 								            }
 								            
+								            //transferWitnessedSignProperties ( originalDoc, destinationNode ); /* webrecs - transfer witnessed-sign properties */
 							            }
 						            } else {
 						            	log.error("[" + fileNameToSign + "] Destination node is not a valid NodeRef.");
@@ -608,10 +659,6 @@ public class SigningService {
             if (current == numpages) {
                 markPage = true;
             }
-        } else if (pages.equals(DigitalSigningDTO.PAGE_LAST)) {
-            if (current == numpages) {
-                markPage = true;
-            }
         } else {
             markPage = true;
         }
@@ -809,4 +856,234 @@ public class SigningService {
 	public final void setMetadataEncryptor(MetadataEncryptor metadataEncryptor) {
 		this.metadataEncryptor = metadataEncryptor;
 	}
+	
+	public ThumbnailService getThumbnailService() {
+		return thumbnailService;
+	}
+
+	public void setThumbnailService(ThumbnailService thumbnailService) {
+		this.thumbnailService = thumbnailService;
+	}
+
+	
+	
+	private byte[] getContent(NodeRef node){
+		try {
+        ContentReader reader = contentService.getReader(node, ContentModel.PROP_CONTENT);
+	    InputStream originalInputStream = reader.getContentInputStream();
+	    ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+	    final int BUF_SIZE = 1 << 8; //1KiB buffer
+	    byte[] buffer = new byte[BUF_SIZE];
+	    int bytesRead = -1;
+	    while((bytesRead = originalInputStream.read(buffer)) > -1) {
+	      outputStream.write(buffer, 0, bytesRead);
+	    }
+	    originalInputStream.close();
+	    return outputStream.toByteArray();	
+		}catch (Exception e){ log.error(e); }
+		return null;
+	}
+
+	private static final String VIDEO_LINK_IMAGE = "video-link-image.png";
+
+	NodeRef getCompanyHomeNode() {
+		// get the root node
+		NodeRef root = nodeService.getRootNode(StoreRef.STORE_REF_WORKSPACE_SPACESSTORE);
+		//get the Company Home folder
+		return nodeService.getChildAssocs(root, ContentModel.ASSOC_CHILDREN, (QName.createQName(NamespaceService.APP_MODEL_1_0_URI, "company_home"))).get(0).getChildRef();
+	}
+
+	/* webrecs gets video link image 
+	 * 
+	 */
+	 // this versioon gets a constant image from Company Home/Webrecs/Config/video-link-image.png 
+	private Image getVideoLinkImage (int width, int height){
+		try {
+			NodeRef node = nodeService.getChildByName(getCompanyHomeNode(), ContentModel.ASSOC_CONTAINS, "Webrecs");
+			//log.debug (" node found " + (String) nodeService.getProperty(node, ContentModel.PROP_NAME));
+			node=nodeService.getChildByName(node, ContentModel.ASSOC_CONTAINS, "Config");
+			//log.debug (" node found " + (String) nodeService.getProperty(node, ContentModel.PROP_NAME));
+			node=nodeService.getChildByName(node, ContentModel.ASSOC_CONTAINS, VIDEO_LINK_IMAGE);
+			log.debug (" Image node found " + (String) nodeService.getProperty(node, ContentModel.PROP_NAME));
+			final ContentReader imageContentReader = getReader(node);
+			// Resize image
+	        BufferedImage newImg = scaleImage(ImageIO.read(imageContentReader.getContentInputStream()), BufferedImage.TYPE_INT_ARGB, width, height);
+	        Image img = Image.getInstance(newImg, null);
+	        return img;
+		}catch (Exception e){
+			log.error(e);
+			//throw new AlfrescoRuntimeException(e.getMessage(), e);
+			return null;
+		}
+	} 
+	
+	/* this version gets the thumbnail image of the video
+	 * 
+	 */
+	private Image getVideoLinkImage (NodeRef node, int width, int height){
+		try {
+			//NodeRef thumbnail=thumbnailService.createThumbnail(node, ContentModel.PROP_CONTENT, "image/png", null, "doclib");
+			NodeRef thumbnail=thumbnailService.getThumbnailByName(node, ContentModel.PROP_CONTENT, "doclib");
+			if (thumbnail == null) return null;
+			final ContentReader imageContentReader = getReader(thumbnail);
+		// Resize image
+	        BufferedImage newImg = scaleImage(ImageIO.read(imageContentReader.getContentInputStream()), BufferedImage.TYPE_INT_ARGB, width, height);
+	        Image img = Image.getInstance(newImg, null);
+	        return img;
+		}catch (Exception e){
+			log.error(e);
+			//throw new AlfrescoRuntimeException(e.getMessage(), e);
+			return null;
+		}
+	}
+
+		private void addWitnessedSignOverlays (NodeRef originalDoc, PdfStamper stp, Rectangle pageRect){
+	    if (nodeService.hasAspect(originalDoc, ASPECT_MARKEDUP)&& nodeService.hasAspect(originalDoc, ASPECT_HASVIDEOCLIPS) ) {
+	    	String jsonString=(String)nodeService.getProperty(originalDoc, SIGNING_LOCATIONS);
+	    	log.debug ("Locations string=" + jsonString);
+	    	SigningLocation [] locations = getSigningLocations( jsonString ) ;
+	    	PdfAnnotation annotation;
+	    	//SigningLocation [] locations = getSigningLocations( "[{\"locationId\": \"Signature 3488234b-f292-478b-abc7-2e72305bdf8a\", \"userName\": \"a a\", \"pageNo\": \"1\", \"xPosition\": \"466.5\", \"yPosition\": \"517.5\", \"randomPrompt\": \"1839\"}, {\"locationId\": \"Signature be8b5ca0-3605-4c5a-8973-108c7bc7fabb\", \"userName\": \"b b\", \"pageNo\": \"1\", \"xPosition\": \"99.0\", \"yPosition\": \"712.5\", \"randomPrompt\": \"3695\"}]" ) ;
+	    	for (SigningLocation signingLoc : locations ) {
+	    		String regex_filename = "^.*\\." + signingLoc.getRandomPrompt() + "\\." + signingLoc.getUserName().replace(" ","_") + "\\.[a-zA-Z0-9]*$";
+	    		log.debug("regex is " + regex_filename);
+	    		for ( AssociationRef assoc : nodeService.getTargetAssocs(originalDoc, SIGNING_VIDEOCLIP) ) {
+					NodeRef target = assoc.getTargetRef();
+	            	String fileName= (String) nodeService.getProperty(target, ContentModel.PROP_NAME);
+		    		//log.debug("filename is " + fileName);
+	            	 if (Pattern.matches(regex_filename, fileName)){
+	            		 log.debug("Matching file for location " + signingLoc.getxPosition() + ","  + signingLoc.getyPosition() + " is " + fileName );
+	                     Rectangle r = new Rectangle(signingLoc.getxPosition(), pageRect.getHeight() - signingLoc.getyPosition(),signingLoc.getxPosition() + ATTACHMENT_ANNOT_WIDTH,pageRect.getHeight() - signingLoc.getyPosition() -  ATTACHMENT_ANNOT_HEIGHT );
+
+	                     try {
+		                     annotation=PdfAnnotation.createFileAttachment(stp.getWriter(), 
+		            				 										r, 
+		            				 										signingLoc.getRandomPrompt() + " " + signingLoc.getUserName(), 
+		            				 										getContent(target), 
+		            				 										null, 
+		            				 										fileName);
+		                     annotation.put (PdfName.NAME, new PdfString ("PaperClip)")); //for older viewers
+		                     Image img = getVideoLinkImage(target,ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get thumbnail as attachment image
+		                     if (img == null)
+		                    	 img=getVideoLinkImage(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get constant as attachment image
+		                     if (img != null){
+			                     img.setAbsolutePosition(0, 0);
+			                     PdfAppearance app = stp.getOverContent(signingLoc.getPageNo()).createAppearance(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT);
+			                     app.addImage(img);
+			                     annotation.setAppearance(PdfAnnotation.APPEARANCE_NORMAL, app);
+		                     }
+		                     stp.addAnnotation(annotation, signingLoc.pageNo);
+	                     }
+	                     catch (Exception e){
+	                    	 log.error(e);
+	             			throw new AlfrescoRuntimeException(e.getMessage(), e);
+	                     }
+	            	 }
+				}
+	    		
+	    		
+	    	}
+	    }
+	}
+	
+	
+	
+	public static class SigningLocation {
+		public SigningLocation(){};
+		private String locationId ;
+		private String userName;
+		private int	   pageNo;
+		@JsonProperty("xPosition")
+		private int	   xPosition;
+		@JsonProperty("yPosition")
+		private int	   yPosition ;
+		private String randomPrompt;
+		
+		public String getLocationId (){
+			return this.locationId;
+		}
+		public String getUserName (){
+			return this.userName;
+		}
+		public int getPageNo (){
+			return this.pageNo;
+		}
+		public int getxPosition(){
+			return this.xPosition;
+		}
+		public int getyPosition(){
+			return this.yPosition;
+		}
+		public String getRandomPrompt(){
+			return this.randomPrompt;
+		}
+		public void setLocationId (String locationId){
+			 this.locationId=locationId;
+		}
+		public void setUserName (String userName){
+			 this.userName=userName;
+		}
+		public void setPageNo (int pageNo){
+			 this.pageNo=pageNo;
+		}
+		public void setxPosition(int xPosition){
+			 this.xPosition=xPosition;
+		}
+		public void setyPosition(int yPosition){
+			 this.yPosition=yPosition;
+		}
+		public void setRandomPrompt(String randomPrompt){
+			 this.randomPrompt=randomPrompt;
+		}
+	}	
+
+	private SigningLocation[] getSigningLocations (String jsonString){
+		/* Loads JSONstring into SigningLocation structure.     String is of the form
+		 * [
+		 *  {"locationId": "Signature 3488234b-f292-478b-abc7-2e72305bdf8a", "userName": "a a", "pageNo": "1", "xPosition": 466.5, "yPosition": 517.5, "randomPrompt": "1839"},
+		 *  {"locationId": "Signature be8b5ca0-3605-4c5a-8973-108c7bc7fabb", "userName": "b b", "pageNo": "1", "xPosition": 99.0, "yPosition": 712.5, "randomPrompt": "3695"}
+		 * ]
+		 */
+		log.debug ("getSigningLocations input string  : " + jsonString);
+		ObjectMapper mapper = new ObjectMapper();
+		try { 
+		SigningLocation []  locations = mapper.readValue(jsonString, SigningLocation [].class);	
+		for ( SigningLocation location : locations){
+			log.debug ("locationId: " + location.locationId +
+					   " userName: "   + location.userName +
+					   " pageNo: " + location.pageNo +
+					   " xPosition: " + location.xPosition +
+					   " yPosition: " + location.yPosition +
+					   " randomPrompt: " + location.randomPrompt);
+		}
+		return locations;
+		} catch (Exception e){ log.error(e);};
+return null;
+		
+	}
+	
+	private void transferWitnessedSignProperties (NodeRef  originalDoc, NodeRef  destinationNode ) {
+	
+    //webrecs copy video signing data across if any 
+	
+	    if (nodeService.hasAspect(originalDoc, ASPECT_MARKEDUP)) {
+	        nodeService.addAspect(destinationNode, ASPECT_MARKEDUP, new HashMap<QName, Serializable>());
+	        nodeService.setProperty(destinationNode, SIGNING_SYSTEM, nodeService.getProperty(originalDoc, SIGNING_SYSTEM));
+	        nodeService.setProperty(destinationNode, SIGNING_DOCID, nodeService.getProperty(originalDoc, SIGNING_DOCID));
+	        nodeService.setProperty(destinationNode, SIGNING_ENVELOPEID, nodeService.getProperty(originalDoc, SIGNING_ENVELOPEID));
+	        nodeService.setProperty(destinationNode, SIGNING_CURRENTLOC, nodeService.getProperty(originalDoc, SIGNING_CURRENTLOC));
+	        nodeService.setProperty(destinationNode, SIGNING_LOCATIONS, nodeService.getProperty(originalDoc, SIGNING_LOCATIONS));
+	    }
+	    
+	    if (nodeService.hasAspect(originalDoc, ASPECT_HASVIDEOCLIPS)) {
+			for ( AssociationRef assoc : nodeService.getTargetAssocs(originalDoc, SIGNING_VIDEOCLIP) ) {
+				nodeService.removeAssociation(originalDoc, assoc.getTargetRef(), SIGNING_VIDEOCLIP);
+	            nodeService.createAssociation(destinationNode, assoc.getTargetRef(), SIGNING_VIDEOCLIP);
+			}
+	    }
+	}
+    
+    
+
 }
+ 

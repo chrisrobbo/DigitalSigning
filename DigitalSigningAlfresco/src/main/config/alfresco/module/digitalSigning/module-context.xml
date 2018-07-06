@@ -38,7 +38,8 @@
 		<property name="contentService" ref="contentService" />
 		<property name="fileFolderService" ref="fileFolderService" />
 		<property name="contentTransformerRegistry" ref="contentTransformerRegistry" />
-		<property name="metadataEncryptor" ref="metadataEncryptor" />
+        <property name="metadataEncryptor" ref="metadataEncryptor" />
+        <property name="thumbnailService" ref="thumbnailService" />
 	</bean>
 	
 	<!-- Digital Signing action -->
