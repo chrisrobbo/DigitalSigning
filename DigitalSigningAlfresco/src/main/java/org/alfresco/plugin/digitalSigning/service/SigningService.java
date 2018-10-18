@@ -74,6 +74,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import com.itextpdf.text.Chunk;
 import com.itextpdf.text.Document;
 import com.itextpdf.text.DocumentException;
+import com.itextpdf.text.Element;
 import com.itextpdf.text.Font;
 import com.itextpdf.text.Font.FontFamily;
 import com.itextpdf.text.Image;
@@ -922,8 +923,8 @@ public class SigningService {
 	 */
 	private Image getVideoLinkImage (NodeRef node, int width, int height){
 		try {
-			//NodeRef thumbnail=thumbnailService.createThumbnail(node, ContentModel.PROP_CONTENT, "image/png", null, "doclib");
-			NodeRef thumbnail=thumbnailService.getThumbnailByName(node, ContentModel.PROP_CONTENT, "doclib");
+			NodeRef thumbnail=thumbnailService.createThumbnail(node, ContentModel.PROP_CONTENT, "image/png", thumbnailService.getThumbnailRegistry().getThumbnailDefinition("doclib").getTransformationOptions(), "doclib");
+			//NodeRef thumbnail=thumbnailService.getThumbnailByName(node, ContentModel.PROP_CONTENT, "doclib");
 			if (thumbnail == null) return null;
 			final ContentReader imageContentReader = getReader(thumbnail);
 		// Resize image
@@ -945,41 +946,53 @@ public class SigningService {
 	    	PdfAnnotation annotation;
 	    	//SigningLocation [] locations = getSigningLocations( "[{\"locationId\": \"Signature 3488234b-f292-478b-abc7-2e72305bdf8a\", \"userName\": \"a a\", \"pageNo\": \"1\", \"xPosition\": \"466.5\", \"yPosition\": \"517.5\", \"randomPrompt\": \"1839\"}, {\"locationId\": \"Signature be8b5ca0-3605-4c5a-8973-108c7bc7fabb\", \"userName\": \"b b\", \"pageNo\": \"1\", \"xPosition\": \"99.0\", \"yPosition\": \"712.5\", \"randomPrompt\": \"3695\"}]" ) ;
 	    	for (SigningLocation signingLoc : locations ) {
-	    		String regex_filename = "^.*\\." + signingLoc.getRandomPrompt() + "\\." + signingLoc.getUserName().replace(" ","_") + "\\.[a-zA-Z0-9]*$";
-	    		log.debug("regex is " + regex_filename);
-	    		for ( AssociationRef assoc : nodeService.getTargetAssocs(originalDoc, SIGNING_VIDEOCLIP) ) {
-					NodeRef target = assoc.getTargetRef();
-	            	String fileName= (String) nodeService.getProperty(target, ContentModel.PROP_NAME);
-		    		//log.debug("filename is " + fileName);
-	            	 if (Pattern.matches(regex_filename, fileName)){
-	            		 log.debug("Matching file for location " + signingLoc.getxPosition() + ","  + signingLoc.getyPosition() + " is " + fileName );
-	                     Rectangle r = new Rectangle(signingLoc.getxPosition(), pageRect.getHeight() - signingLoc.getyPosition(),signingLoc.getxPosition() + ATTACHMENT_ANNOT_WIDTH,pageRect.getHeight() - signingLoc.getyPosition() -  ATTACHMENT_ANNOT_HEIGHT );
-
-	                     try {
-		                     annotation=PdfAnnotation.createFileAttachment(stp.getWriter(), 
-		            				 										r, 
-		            				 										signingLoc.getRandomPrompt() + " " + signingLoc.getUserName(), 
-		            				 										getContent(target), 
-		            				 										null, 
-		            				 										fileName);
-		                     annotation.put (PdfName.NAME, new PdfString ("PaperClip)")); //for older viewers
-		                     Image img = getVideoLinkImage(target,ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get thumbnail as attachment image
-		                     if (img == null)
-		                    	 img=getVideoLinkImage(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get constant as attachment image
-		                     if (img != null){
-			                     img.setAbsolutePosition(0, 0);
-			                     PdfAppearance app = stp.getOverContent(signingLoc.getPageNo()).createAppearance(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT);
-			                     app.addImage(img);
-			                     annotation.setAppearance(PdfAnnotation.APPEARANCE_NORMAL, app);
+	    		if (signingLoc.getType().equalsIgnoreCase("SignHere") ) {
+		    		String regex_filename = "^.*\\." + signingLoc.getRandomPrompt() + "\\." + signingLoc.getUserName().replace(" ","_") + "\\.[a-zA-Z0-9]*$";
+		    		log.debug("regex is " + regex_filename);
+		    		for ( AssociationRef assoc : nodeService.getTargetAssocs(originalDoc, SIGNING_VIDEOCLIP) ) {
+						NodeRef target = assoc.getTargetRef();
+		            	String fileName= (String) nodeService.getProperty(target, ContentModel.PROP_NAME);
+			    		//log.debug("filename is " + fileName);
+		            	 if (Pattern.matches(regex_filename, fileName)){
+		            		 log.debug("Matching file for location " + signingLoc.getxPosition() + ","  + signingLoc.getyPosition() + " is " + fileName );
+		                     Rectangle r = new Rectangle(signingLoc.getxPosition(), pageRect.getHeight() - signingLoc.getyPosition(),signingLoc.getxPosition() + ATTACHMENT_ANNOT_WIDTH,pageRect.getHeight() - signingLoc.getyPosition() -  ATTACHMENT_ANNOT_HEIGHT );
+	
+		                     try {
+			                     annotation=PdfAnnotation.createFileAttachment(stp.getWriter(), 
+			            				 										r, 
+			            				 										signingLoc.getRandomPrompt() + " " + signingLoc.getUserName(), 
+			            				 										getContent(target), 
+			            				 										null, 
+			            				 										fileName);
+			                     annotation.put (PdfName.NAME, new PdfString ("PaperClip)")); //for older viewers
+			                     Image img = getVideoLinkImage(target,ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get thumbnail as attachment image
+			                     if (img == null)
+			                    	 img=getVideoLinkImage(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT); //get constant as attachment image
+			                     if (img != null){
+				                     img.setAbsolutePosition(0, 0);
+				                     PdfAppearance app = stp.getOverContent(signingLoc.getPageNo()).createAppearance(ATTACHMENT_ANNOT_WIDTH, ATTACHMENT_ANNOT_HEIGHT);
+				                     app.addImage(img);
+				                     annotation.setAppearance(PdfAnnotation.APPEARANCE_NORMAL, app);
+			                     }
+			                     stp.addAnnotation(annotation, signingLoc.pageNo);
 		                     }
-		                     stp.addAnnotation(annotation, signingLoc.pageNo);
-	                     }
-	                     catch (Exception e){
-	                    	 log.error(e);
-	             			throw new AlfrescoRuntimeException(e.getMessage(), e);
-	                     }
-	            	 }
-				}
+		                     catch (Exception e){
+		                    	 log.error(e);
+		             			throw new AlfrescoRuntimeException(e.getMessage(), e);
+		                     }
+		            	 }
+					}
+		    	} else if (signingLoc.getType().equalsIgnoreCase("FullName")){
+		    		ColumnText.showTextAligned(stp.getOverContent(signingLoc.getPageNo()),
+		    				Element.ALIGN_LEFT,
+		    				new Phrase (signingLoc.getUserName()),
+		    				signingLoc.getxPosition(),
+		    				pageRect.getHeight() - signingLoc.getyPosition(),
+		    				0);
+		    	} else if (signingLoc.getType().equalsIgnoreCase("EmailAddress")){
+		    		
+		    		
+		    	}
 	    	}
 	    }
 	}
@@ -988,6 +1001,7 @@ public class SigningService {
 	
 	public static class SigningLocation {
 		public SigningLocation(){};
+		private String type;
 		private String locationId ;
 		private String userName;
 		private int	   pageNo;
@@ -1033,6 +1047,12 @@ public class SigningService {
 		public void setRandomPrompt(String randomPrompt){
 			 this.randomPrompt=randomPrompt;
 		}
+		public String getType() {
+			return type;
+		}
+		public void setType(String type) {
+			this.type = type;
+		}
 	}	
 
 	private SigningLocation[] getSigningLocations (String jsonString){
@@ -1047,7 +1067,8 @@ public class SigningService {
 		try { 
 		SigningLocation []  locations = mapper.readValue(jsonString, SigningLocation [].class);	
 		for ( SigningLocation location : locations){
-			log.debug ("locationId: " + location.locationId +
+			log.debug ( "type: " + location.type +
+						"locationId: " + location.locationId +
 					   " userName: "   + location.userName +
 					   " pageNo: " + location.pageNo +
 					   " xPosition: " + location.xPosition +
